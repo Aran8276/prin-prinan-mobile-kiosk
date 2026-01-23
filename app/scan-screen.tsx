@@ -14,6 +14,7 @@ import {
   Vibration,
   View,
 } from 'react-native';
+import { getSettings } from '../utils/settings';
 
 const PRINTER_CONFIG = {
   paperRemaining: 100,
@@ -85,7 +86,7 @@ export default function ScanScreen() {
     };
   }, [showInactivityWarning]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (showInactivityWarning && countdown <= 0) router.back();
   }, [countdown, showInactivityWarning, router]);
 
@@ -179,12 +180,53 @@ export default function ScanScreen() {
     }, 1500);
   };
 
+  const handlePrintJobs = async () => {
+    const settings = await getSettings();
+    if (!settings.baseUrl) {
+      Alert.alert(
+        'URL Belum Diatur',
+        'Mohon atur Base URL printer di halaman Pengaturan terlebih dahulu.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const printJobs = MOCK_FILES.map((file) => {
+      const params = new URLSearchParams();
+      settings.params.forEach((p) => params.append(p.key, p.value));
+      params.set('paperSize', file.type);
+
+      const url = `http://${settings.baseUrl}/print?${params.toString()}`;
+
+      return fetch(url)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Gagal mencetak ${file.fileName}`);
+          }
+          return response.text();
+        })
+        .catch((err) => {
+          console.error(`Fetch error for ${file.fileName}:`, err);
+          throw new Error(`Gagal terhubung ke printer untuk file ${file.fileName}`);
+        });
+    });
+
+    try {
+      await Promise.all(printJobs);
+    } catch (error: any) {
+      console.error('Print job failed:', error);
+      Alert.alert(
+        'Gagal Mencetak',
+        error.message ||
+          'Terjadi kesalahan saat mengirim dokumen ke printer. Mohon periksa pengaturan atau hubungi petugas.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const finishTransaction = (method: string) => {
-    Alert.alert(
-      'Pembayaran Berhasil',
-      `${MOCK_FILES.length} Dokumen sedang diproses.\nMetode: ${method}`,
-      [{ text: 'Selesai', onPress: () => router.back() }]
-    );
+    handlePrintJobs();
+    router.replace('/(modal)/success');
   };
 
   const resetScanner = () => {

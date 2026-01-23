@@ -80,6 +80,14 @@ export default function WelcomeScreen() {
       </View>
 
       <View className="relative flex-1 flex-col justify-between overflow-hidden">
+        <View className="absolute right-6 top-16 z-20">
+          <TouchableOpacity
+            onPress={() => router.navigate('(modal)/pin')}
+            className="h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white/80 shadow-sm active:bg-slate-50">
+            <Ionicons name="settings-outline" size={24} color="#475569" />
+          </TouchableOpacity>
+        </View>
+
         <View className="absolute left-0 top-0 -ml-24 -mt-10 h-72 w-72 rounded-full bg-blue-100 opacity-40" />
         <View className="absolute bottom-0 right-0 -mb-10 -mr-24 h-80 w-80 rounded-full bg-blue-50 opacity-60" />
 
