@@ -64,7 +64,6 @@ export default function WelcomeScreen() {
         className={`absolute inset-0 z-50 bg-black ${isAttractMode ? 'opacity-100' : 'opacity-0'}`}>
         <VideoView
           player={player}
-          allowsFullscreen={false}
           allowsPictureInPicture={false}
           nativeControls={false}
           style={{ flex: 1, width: width, height: height }}

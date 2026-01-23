@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -58,13 +58,12 @@ export default function ScanScreen() {
   const totalSheets = MOCK_FILES.reduce((sum, file) => sum + file.sheets, 0);
   const totalPriceQRIS = totalSheets * PRICING.qrisPerSheet;
   const totalPriceSaldo = totalSheets * PRICING.saldoPerSheet;
-  const totalSavings = totalPriceQRIS - totalPriceSaldo;
 
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startInactivityTimer = () => {
+  const startInactivityTimer = useCallback(() => {
     if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
     if (paymentSelectionVisible || qrisModalVisible || saldoConfirmVisible) return;
 
@@ -74,7 +73,7 @@ export default function ScanScreen() {
     inactivityTimeoutRef.current = setTimeout(() => {
       if (!scanned) setShowInactivityWarning(true);
     }, 30000);
-  };
+  }, [paymentSelectionVisible, qrisModalVisible, saldoConfirmVisible, scanned]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -86,16 +85,16 @@ export default function ScanScreen() {
     };
   }, [showInactivityWarning]);
 
-  useEffect(() => {
+  useEffect(() => { 
     if (showInactivityWarning && countdown <= 0) router.back();
-  }, [countdown, showInactivityWarning]);
+  }, [countdown, showInactivityWarning, router]);
 
   useEffect(() => {
     startInactivityTimer();
     return () => {
       if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
     };
-  }, []);
+  }, [startInactivityTimer]);
 
   useEffect(() => {
     if (scanned || paymentSelectionVisible || qrisModalVisible || saldoConfirmVisible) {
@@ -104,7 +103,7 @@ export default function ScanScreen() {
     } else {
       startInactivityTimer();
     }
-  }, [scanned, paymentSelectionVisible, qrisModalVisible, saldoConfirmVisible]);
+  }, [scanned, paymentSelectionVisible, qrisModalVisible, saldoConfirmVisible, startInactivityTimer]);
 
   if (!permission) return <View className="flex-1 bg-white" />;
   if (!permission.granted) {
