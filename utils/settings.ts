@@ -2,21 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SETTINGS_KEY = '@PrinPrinan:settings';
 
-export interface UrlParam {
-  key: string;
-  value: string;
-}
-
 export interface AppSettings {
   baseUrl: string;
   pin: string;
-  params: UrlParam[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   baseUrl: '',
   pin: '0000',
-  params: [{ key: 'copies', value: '1' }],
 };
 
 export const saveSettings = async (settings: AppSettings): Promise<void> => {

@@ -48,25 +48,6 @@ const SettingsScreen = () => {
     router.back();
   };
 
-  const addParam = () => {
-    if (!settings) return;
-    const newParams = [...settings.params, { key: '', value: '' }];
-    setSettings({ ...settings, params: newParams });
-  };
-
-  const removeParam = (index: number) => {
-    if (!settings) return;
-    const newParams = settings.params.filter((_, i) => i !== index);
-    setSettings({ ...settings, params: newParams });
-  };
-
-  const updateParam = (index: number, field: 'key' | 'value', text: string) => {
-    if (!settings) return;
-    const newParams = [...settings.params];
-    newParams[index][field] = text;
-    setSettings({ ...settings, params: newParams });
-  };
-
   if (!settings) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
@@ -128,39 +109,6 @@ const SettingsScreen = () => {
           <Text className="mt-2 text-xs text-slate-400">
             Kosongkan jika tidak ingin mengubah PIN.
           </Text>
-        </View>
-
-        <View>
-          <Text className="mb-4 text-base font-bold text-slate-700">URL Parameter Cetak</Text>
-          {settings.params.map((param, index) => (
-            <View key={index} className="mb-4 flex-row items-center gap-x-2">
-              <TextInput
-                value={param.key}
-                onChangeText={(text) => updateParam(index, 'key', text)}
-                placeholder="Key"
-                className="flex-1 rounded-xl border border-slate-300 bg-slate-50 p-4"
-                autoCapitalize="none"
-              />
-              <TextInput
-                value={param.value}
-                onChangeText={(text) => updateParam(index, 'value', text)}
-                placeholder="Value"
-                className="flex-1 rounded-xl border border-slate-300 bg-slate-50 p-4"
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                onPress={() => removeParam(index)}
-                className="h-12 w-12 items-center justify-center rounded-xl bg-red-100 active:bg-red-200">
-                <Ionicons name="trash-outline" size={20} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity
-            onPress={addParam}
-            className="mt-2 flex-row items-center justify-center rounded-xl border-2 border-dashed border-slate-300 py-3 active:bg-slate-50">
-            <Ionicons name="add" size={20} color="#94a3b8" style={{ marginRight: 4 }} />
-            <Text className="font-bold text-slate-500">Tambah Parameter</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
       <View className="absolute bottom-0 w-full border-t border-slate-100 bg-white p-6">

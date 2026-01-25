@@ -16,27 +16,22 @@ import {
 } from 'react-native';
 import { getSettings } from '../utils/settings';
 
-const PRINTER_CONFIG = {
-  paperRemaining: 100,
-  isOnline: true,
-};
-
-const MOCK_FILES = [
-  { id: '1', fileName: 'Skripsi_Bab_1_Revisi.pdf', sheets: 12, type: 'A4' },
-  { id: '2', fileName: 'Surat_Lamaran_Kerja.pdf', sheets: 2, type: 'A4' },
-  { id: '3', fileName: 'Scan_KTP_Warna.pdf', sheets: 1, type: 'A4' },
-  { id: '4', fileName: 'Lampiran_Pendukung_Data_Final.pdf', sheets: 5, type: 'A4' },
-  { id: '5', fileName: 'Pas_Foto_4x6.pdf', sheets: 1, type: 'A4' },
-];
-
-const USER_DATA = {
-  balance: 50000,
-};
-
-const PRICING = {
-  qrisPerSheet: 2000,
-  saldoPerSheet: 1500,
-};
+interface Asset {
+  filename: string;
+  pages: number;
+}
+interface PrintJobDetail {
+  id: string;
+  asset: Asset;
+  price: number;
+}
+interface PrintJob {
+  id: string;
+  customer_name: string;
+  total_price: number;
+  status: string;
+  details: PrintJobDetail[];
+}
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -51,14 +46,9 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const [scanned, setScanned] = useState(false);
-  const [paymentSelectionVisible, setPaymentSelectionVisible] = useState(false);
-  const [qrisModalVisible, setQrisModalVisible] = useState(false);
-  const [saldoConfirmVisible, setSaldoConfirmVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
-
-  const totalSheets = MOCK_FILES.reduce((sum, file) => sum + file.sheets, 0);
-  const totalPriceQRIS = totalSheets * PRICING.qrisPerSheet;
-  const totalPriceSaldo = totalSheets * PRICING.saldoPerSheet;
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null);
 
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [countdown, setCountdown] = useState(30);
@@ -66,7 +56,7 @@ export default function ScanScreen() {
 
   const startInactivityTimer = useCallback(() => {
     if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
-    if (paymentSelectionVisible || qrisModalVisible || saldoConfirmVisible) return;
+    if (printJob) return;
 
     setShowInactivityWarning(false);
     setCountdown(30);
@@ -74,7 +64,7 @@ export default function ScanScreen() {
     inactivityTimeoutRef.current = setTimeout(() => {
       if (!scanned) setShowInactivityWarning(true);
     }, 30000);
-  }, [paymentSelectionVisible, qrisModalVisible, saldoConfirmVisible, scanned]);
+  }, [printJob, scanned]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -98,13 +88,13 @@ export default function ScanScreen() {
   }, [startInactivityTimer]);
 
   useEffect(() => {
-    if (scanned || paymentSelectionVisible || qrisModalVisible || saldoConfirmVisible) {
+    if (scanned || printJob) {
       if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
       setShowInactivityWarning(false);
     } else {
       startInactivityTimer();
     }
-  }, [scanned, paymentSelectionVisible, qrisModalVisible, saldoConfirmVisible, startInactivityTimer]);
+  }, [scanned, printJob, startInactivityTimer]);
 
   if (!permission) return <View className="flex-1 bg-white" />;
   if (!permission.granted) {
@@ -122,118 +112,85 @@ export default function ScanScreen() {
     startInactivityTimer();
   };
 
-  const handleBarCodeScanned = () => {
+  const resetScanner = () => {
+    setPrintJob(null);
+    setScanned(false);
+    startInactivityTimer();
+  };
+
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (isLoading) return;
+
     setScanned(true);
+    setIsLoading(true);
     Vibration.vibrate();
 
-    if (totalSheets > PRINTER_CONFIG.paperRemaining) {
-      Alert.alert(
-        'Kertas Tidak Cukup',
-        `Total dokumen ${totalSheets} lembar, sisa kertas di mesin ${PRINTER_CONFIG.paperRemaining}.\n\nSilakan hubungi petugas.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setScanned(false);
-              startInactivityTimer();
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    setPaymentSelectionVisible(true);
-  };
-
-  const handleSelectQRIS = () => {
-    setPaymentSelectionVisible(false);
-    setQrisModalVisible(true);
-    setTimeout(() => {
-      setQrisModalVisible(false);
-      finishTransaction('QRIS');
-    }, 3000);
-  };
-
-  const handleSelectSaldo = () => {
-    if (USER_DATA.balance < totalPriceSaldo) {
-      Alert.alert(
-        'Saldo Tidak Cukup ⚠️',
-        `Total tagihan ${formatCurrency(totalPriceSaldo)}, saldo Anda hanya ${formatCurrency(USER_DATA.balance)}.\n\nMohon isi ulang saldo atau gunakan QRIS.`,
-        [
-          { text: 'Gunakan QRIS Saja', onPress: () => handleSelectQRIS() },
-          { text: 'Batal', style: 'cancel' },
-        ]
-      );
-      return;
-    }
-    setPaymentSelectionVisible(false);
-    setSaldoConfirmVisible(true);
-  };
-
-  const processSaldoPayment = () => {
-    setProcessing(true);
-    setTimeout(() => {
-      setProcessing(false);
-      setSaldoConfirmVisible(false);
-      finishTransaction('SALDO');
-    }, 1500);
-  };
-
-  const handlePrintJobs = async () => {
-    const settings = await getSettings();
-    if (!settings.baseUrl) {
-      Alert.alert(
-        'URL Belum Diatur',
-        'Mohon atur Base URL printer di halaman Pengaturan terlebih dahulu.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    const printJobs = MOCK_FILES.map((file) => {
-      const params = new URLSearchParams();
-      settings.params.forEach((p) => params.append(p.key, p.value));
-      params.set('paperSize', file.type);
-
-      const url = `http://${settings.baseUrl}/print?${params.toString()}`;
-
-      return fetch(url)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Gagal mencetak ${file.fileName}`);
-          }
-          return response.text();
-        })
-        .catch((err) => {
-          console.error(`Fetch error for ${file.fileName}:`, err);
-          throw new Error(`Gagal terhubung ke printer untuk file ${file.fileName}`);
-        });
-    });
-
     try {
-      await Promise.all(printJobs);
+      const settings = await getSettings();
+      if (!settings.baseUrl) {
+        Alert.alert('Printer Belum Diatur', 'Harap atur Base URL printer di halaman Pengaturan.', [
+          { text: 'OK' },
+        ]);
+        resetScanner();
+        return;
+      }
+      console.log(data);
+
+      const response = await fetch(`http://${settings.baseUrl}/print-job/${data}`);
+      const result = await response.json();
+
+      console.log(result);
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Gagal mengambil data pekerjaan cetak.');
+      }
+
+      if (result.data.status !== 'pending_payment') {
+        Alert.alert('Pekerjaan Tidak Valid', 'Pekerjaan cetak ini sudah dibayar atau dibatalkan.', [
+          { text: 'OK', onPress: resetScanner },
+        ]);
+        return;
+      }
+
+      setPrintJob(result.data);
     } catch (error: any) {
-      console.error('Print job failed:', error);
-      Alert.alert(
-        'Gagal Mencetak',
-        error.message ||
-          'Terjadi kesalahan saat mengirim dokumen ke printer. Mohon periksa pengaturan atau hubungi petugas.',
-        [{ text: 'OK' }]
-      );
+      console.error('Failed to fetch print job', error);
+      Alert.alert('Error', error.message || 'Tidak dapat terhubung ke server.', [
+        { text: 'OK', onPress: resetScanner },
+      ]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const finishTransaction = (method: string) => {
-    handlePrintJobs();
-    router.replace('/(modal)/success');
-  };
+  const handleConfirmAndPrint = async () => {
+    if (!printJob) return;
 
-  const resetScanner = () => {
-    setPaymentSelectionVisible(false);
-    setQrisModalVisible(false);
-    setSaldoConfirmVisible(false);
-    setScanned(false);
+    setProcessing(true);
+    try {
+      const settings = await getSettings();
+      const { baseUrl } = settings;
+      const jobId = printJob.id;
+
+      const payResponse = await fetch(`http://${baseUrl}/print-job/${jobId}/pay`, {
+        method: 'POST',
+      });
+      if (!payResponse.ok) {
+        throw new Error('Pembayaran gagal. Silakan coba lagi.');
+      }
+
+      const dispatchResponse = await fetch(`http://${baseUrl}/print-job/${jobId}/dispatch`, {
+        method: 'POST',
+      });
+      if (!dispatchResponse.ok) {
+        throw new Error('Gagal mengirimkan pekerjaan ke printer.');
+      }
+
+      router.replace('/(modal)/success');
+    } catch (error: any) {
+      console.error('Error during payment/dispatch:', error);
+      Alert.alert('Error', error.message || 'Terjadi kesalahan.');
+      setProcessing(false);
+    }
   };
 
   return (
@@ -255,18 +212,20 @@ export default function ScanScreen() {
       <View className="z-10 flex-1 flex-col items-center justify-start pt-10">
         <View className="mb-8 px-8">
           <Text className="text-center text-lg font-medium text-slate-500">
-            Arahkan kode QR WhatsApp ke kamera
+            Arahkan kode QR dari WhatsApp ke kamera
           </Text>
         </View>
         <View className="relative">
           <View className="absolute -inset-1 rounded-[36px] bg-blue-100 opacity-50" />
           <View className="h-[400px] w-[320px] overflow-hidden rounded-[32px] border-8 border-white bg-slate-900 shadow-2xl shadow-blue-300">
-            <CameraView
-              style={StyleSheet.absoluteFillObject}
-              facing="front"
-              onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            />
+            {!printJob && (
+              <CameraView
+                style={StyleSheet.absoluteFillObject}
+                facing="front"
+                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              />
+            )}
             <View className="absolute inset-0 items-center justify-center">
               <View className="h-64 w-64 items-center justify-center">
                 <View className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white/80" />
@@ -281,13 +240,13 @@ export default function ScanScreen() {
             <View className="absolute bottom-6 w-full items-center">
               <View className="rounded-full bg-black/60 px-4 py-2 backdrop-blur-md">
                 <Text className="text-xs font-bold uppercase tracking-widest text-white">
-                  {scanned ? 'Memproses...' : 'Mencari...'}
+                  {isLoading ? 'Memproses...' : 'Mencari...'}
                 </Text>
               </View>
             </View>
           </View>
         </View>
-        {scanned && !paymentSelectionVisible && !qrisModalVisible && !saldoConfirmVisible && (
+        {scanned && !printJob && !isLoading && (
           <TouchableOpacity
             onPress={resetScanner}
             className="mt-8 flex-row items-center space-x-2 rounded-full bg-slate-900 px-6 py-3 shadow-lg active:scale-95">
@@ -325,15 +284,17 @@ export default function ScanScreen() {
       <Modal
         animationType="slide"
         transparent={true}
-        visible={paymentSelectionVisible}
+        visible={!!printJob}
         onRequestClose={resetScanner}>
         <View className="flex-1 bg-white">
           <StatusBar barStyle="dark-content" />
 
           <View className="z-10 flex-row items-center justify-between border-b border-slate-100 bg-white px-6 pb-4 pt-16">
             <View>
-              <Text className="text-2xl font-extrabold text-slate-900">Pembayaran</Text>
-              <Text className="text-sm text-slate-500">{MOCK_FILES.length} Dokumen Terpilih</Text>
+              <Text className="text-2xl font-extrabold text-slate-900">Konfirmasi Cetak</Text>
+              <Text className="text-sm text-slate-500">
+                Untuk: {printJob?.customer_name || 'Customer'}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={resetScanner}
@@ -352,17 +313,19 @@ export default function ScanScreen() {
 
               <ScrollView className="flex-1 px-4">
                 <View className="gap-y-3 py-2">
-                  {MOCK_FILES.map((file, index) => (
+                  {printJob?.details.map((file, index) => (
                     <View
                       key={file.id}
-                      className={`flex-row justify-between ${index !== MOCK_FILES.length - 1 ? 'border-b border-dashed border-slate-200 pb-3' : ''}`}>
+                      className={`flex-row justify-between ${index !== (printJob?.details.length ?? 0) - 1 ? 'border-b border-dashed border-slate-200 pb-3' : ''}`}>
                       <View className="mr-4 flex-1">
                         <Text numberOfLines={1} className="text-sm font-semibold text-slate-700">
-                          {file.fileName}
+                          {file.asset.filename}
                         </Text>
-                        <Text className="text-xs text-slate-400">{file.type}</Text>
+                        <Text className="text-xs text-slate-400">{formatCurrency(file.price)}</Text>
                       </View>
-                      <Text className="text-sm font-bold text-slate-900">{file.sheets} lbr</Text>
+                      <Text className="text-sm font-bold text-slate-900">
+                        {file.asset.pages} lbr
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -370,131 +333,16 @@ export default function ScanScreen() {
 
               <View className="border-t border-slate-200 bg-white p-4">
                 <View className="flex-row items-center justify-between">
-                  <Text className="font-semibold text-slate-500">Total Halaman</Text>
-                  <Text className="text-xl font-black text-slate-900">{totalSheets} Lembar</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View className="border-t border-slate-50 bg-white px-6 pb-8 pt-4">
-            <Text className="mb-4 text-center text-xs font-bold uppercase tracking-widest text-slate-400">
-              Pilih Metode Pembayaran
-            </Text>
-
-            <View className="gap-y-4">
-              <TouchableOpacity
-                onPress={handleSelectSaldo}
-                className="relative flex-row items-center overflow-hidden rounded-3xl border-2 border-blue-500 bg-blue-50 p-4 shadow-lg shadow-blue-100 active:scale-[0.99]">
-                <View className="absolute right-0 top-0 rounded-bl-2xl bg-blue-500 px-4 py-1.5 shadow-sm">
-                  <Text className="text-[10px] font-bold tracking-wide text-white">
-                    LEBIH MURAH
+                  <Text className="font-semibold text-slate-500">Total Biaya</Text>
+                  <Text className="text-xl font-black text-slate-900">
+                    {formatCurrency(printJob?.total_price || 0)}
                   </Text>
                 </View>
-
-                <View className="mr-4 h-12 w-12 items-center justify-center rounded-full bg-blue-600 shadow-md shadow-blue-300">
-                  <Ionicons name="wallet" size={24} color="white" />
-                </View>
-                <View className="flex-1 pr-4">
-                  <Text className="text-lg font-extrabold text-slate-900">Saldo PrinPrinan</Text>
-                  <Text className="text-sm font-bold text-blue-700">
-                    {formatCurrency(totalPriceSaldo)}{' '}
-                    <Text className="text-xs font-normal text-slate-500 line-through decoration-slate-400 decoration-2">
-                      {formatCurrency(totalPriceQRIS)}
-                    </Text>
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#2563EB" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleSelectQRIS}
-                className="flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 shadow-sm active:bg-slate-50">
-                <View className="mr-4 h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                  <Ionicons name="qr-code" size={24} color="#64748b" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-lg font-bold text-slate-800">QRIS</Text>
-                  <Text className="text-sm text-slate-500">{formatCurrency(totalPriceQRIS)}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#cbd5e1" />
-              </TouchableOpacity>
-            </View>
-
-            <View className="mt-6 items-center">
-              <Text className="text-center text-[10px] font-medium leading-tight text-slate-400">
-                Hubungi Admin Rantai Media Digital jika ingin pembayaran offline.
-              </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
 
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={qrisModalVisible}
-        onRequestClose={() => {}}>
-        <View className="flex-1 items-center justify-center bg-black/80 px-6 backdrop-blur-md">
-          <View className="w-full items-center overflow-hidden rounded-3xl bg-white p-8">
-            <View className="mb-6 w-full flex-row items-center justify-between">
-              <Text className="text-lg font-bold text-slate-900">Scan QRIS</Text>
-              <View className="rounded-full bg-red-100 px-3 py-1">
-                <Text className="text-xs font-bold text-red-600">OTOMATIS</Text>
-              </View>
-            </View>
-            <View className="relative mb-6 h-64 w-64 items-center justify-center rounded-xl bg-slate-900">
-              <View className="absolute inset-0 bg-white opacity-10" />
-              <Ionicons name="qr-code" size={180} color="white" />
-              <View className="absolute inset-0 items-center justify-center">
-                <ActivityIndicator size="large" color="#ffffff" className="scale-150" />
-              </View>
-            </View>
-            <Text className="mb-2 text-3xl font-black text-slate-900">
-              {formatCurrency(totalPriceQRIS)}
-            </Text>
-            <Text className="mb-6 text-center text-slate-500">
-              Menunggu pembayaran dari e-wallet...
-            </Text>
-            <View className="flex-row gap-2">
-              <View className="h-2 w-2 animate-bounce rounded-full bg-slate-300" />
-              <View className="h-2 w-2 animate-bounce rounded-full bg-slate-300 delay-100" />
-              <View className="h-2 w-2 animate-bounce rounded-full bg-slate-300 delay-200" />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={saldoConfirmVisible}
-        onRequestClose={() => setSaldoConfirmVisible(false)}>
-        <View className="flex-1 justify-end bg-black/60">
-          <View className="rounded-t-[40px] bg-white p-8 pb-12">
-            <Text className="mb-6 text-center text-xl font-extrabold text-slate-900">
-              Konfirmasi Pembayaran
-            </Text>
-            <View className="mb-8 rounded-2xl border border-slate-100 bg-slate-50 p-6">
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-slate-500">Saldo Awal</Text>
-                <Text className="font-mono text-slate-700">
-                  {formatCurrency(USER_DATA.balance)}
-                </Text>
-              </View>
-              <View className="mb-2 flex-row justify-between border-b border-dashed border-slate-200 pb-2">
-                <Text className="text-slate-500">Total Biaya ({totalSheets} lbr)</Text>
-                <Text className="font-mono font-bold text-red-500">
-                  -{formatCurrency(totalPriceSaldo)}
-                </Text>
-              </View>
-              <View className="flex-row justify-between pt-2">
-                <Text className="font-bold text-slate-900">Sisa Saldo</Text>
-                <Text className="font-mono font-bold text-blue-600">
-                  {formatCurrency(USER_DATA.balance - totalPriceSaldo)}
-                </Text>
-              </View>
-            </View>
+          <View className="border-t border-slate-50 bg-white px-6 pb-8 pt-6">
             {processing ? (
               <View className="h-14 w-full items-center justify-center rounded-full bg-slate-100">
                 <ActivityIndicator color="#2563EB" />
@@ -502,17 +350,14 @@ export default function ScanScreen() {
             ) : (
               <View className="flex-row gap-4">
                 <TouchableOpacity
-                  onPress={() => {
-                    setSaldoConfirmVisible(false);
-                    setPaymentSelectionVisible(true);
-                  }}
+                  onPress={resetScanner}
                   className="flex-1 items-center justify-center rounded-full border border-slate-200 py-4">
                   <Text className="font-bold text-slate-500">Batal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={processSaldoPayment}
+                  onPress={handleConfirmAndPrint}
                   className="flex-[2] items-center justify-center rounded-full bg-blue-600 py-4 shadow-lg shadow-blue-200">
-                  <Text className="text-lg font-bold text-white">Bayar Sekarang</Text>
+                  <Text className="text-lg font-bold text-white">Bayar & Cetak</Text>
                 </TouchableOpacity>
               </View>
             )}
