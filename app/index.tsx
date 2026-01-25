@@ -66,17 +66,17 @@ export default function WelcomeScreen() {
           player={player}
           allowsPictureInPicture={false}
           nativeControls={false}
-          style={{ flex: 1, width: width, height: height }}
+          style={{ flex: 1, width: 492, height: height }}
         />
 
-        <TouchableOpacity
+        {/* <TouchableOpacity
           activeOpacity={1}
           onPress={handleUserActivity}
           className="absolute inset-0 items-center justify-end bg-transparent pb-24">
           <View className="animate-pulse rounded-full border border-white/20 bg-black/60 px-8 py-4">
             <Text className="text-xl font-bold tracking-widest text-white">SENTUH LAYAR</Text>
           </View>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       <View className="relative flex-1 flex-col justify-between overflow-hidden">
