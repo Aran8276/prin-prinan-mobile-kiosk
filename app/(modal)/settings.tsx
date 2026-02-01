@@ -5,6 +5,7 @@ import {
   Alert,
   ScrollView,
   StatusBar,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -12,9 +13,15 @@ import {
 } from 'react-native';
 import { AppSettings, getSettings, saveSettings } from '../../utils/settings';
 
+// Extending the interface locally to support new fields if not present in utils
+interface ExtendedAppSettings extends AppSettings {
+  enableQris?: boolean;
+  qrisImageUrl?: string;
+}
+
 const SettingsScreen = () => {
   const router = useRouter();
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settings, setSettings] = useState<ExtendedAppSettings | null>(null);
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
 
@@ -43,6 +50,11 @@ const SettingsScreen = () => {
       settingsToSave.pin = newPin;
     }
 
+    // Ensure numeric/boolean types where necessary or string trimming
+    if (settingsToSave.qrisImageUrl) {
+      settingsToSave.qrisImageUrl = settingsToSave.qrisImageUrl.trim();
+    }
+
     await saveSettings(settingsToSave);
     Alert.alert('Tersimpan', 'Pengaturan berhasil disimpan.');
     router.back();
@@ -62,7 +74,7 @@ const SettingsScreen = () => {
       <View className="z-10 flex-row items-center justify-between border-b border-slate-100 bg-white px-6 pb-4 pt-16">
         <View>
           <Text className="text-2xl font-extrabold text-slate-900">Pengaturan</Text>
-          <Text className="text-sm text-slate-500">Konfigurasi Printer</Text>
+          <Text className="text-sm text-slate-500">Konfigurasi Printer & Pembayaran</Text>
         </View>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -71,6 +83,7 @@ const SettingsScreen = () => {
         </TouchableOpacity>
       </View>
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingBottom: 120 }}>
+        {/* Printer Configuration */}
         <View className="mb-8">
           <Text className="mb-2 text-base font-bold text-slate-700">Printer Base URL</Text>
           <TextInput
@@ -86,7 +99,41 @@ const SettingsScreen = () => {
           </Text>
         </View>
 
-        <View className="mb-8">
+        {/* QRIS Configuration */}
+        <View className="mb-8 border-t border-slate-100 pt-6">
+          <View className="mb-4 flex-row items-center justify-between">
+            <View>
+              <Text className="text-base font-bold text-slate-700">Aktifkan QRIS</Text>
+              <Text className="text-xs text-slate-400">Izinkan pembayaran via QRIS</Text>
+            </View>
+            <Switch
+              value={settings.enableQris ?? false}
+              onValueChange={(val) => setSettings({ ...settings, enableQris: val })}
+              trackColor={{ false: '#cbd5e1', true: '#2563eb' }}
+              thumbColor={'#ffffff'}
+            />
+          </View>
+
+          {settings.enableQris && (
+            <View>
+              <Text className="mb-2 text-base font-bold text-slate-700">URL Gambar QRIS</Text>
+              <TextInput
+                value={settings.qrisImageUrl ?? ''}
+                onChangeText={(text) => setSettings({ ...settings, qrisImageUrl: text })}
+                placeholder="https://example.com/qris.jpg"
+                className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-lg"
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+              <Text className="mt-2 text-xs text-slate-400">
+                Link langsung ke file gambar QR Code Statis.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* PIN Configuration */}
+        <View className="mb-8 border-t border-slate-100 pt-6">
           <Text className="mb-2 text-base font-bold text-slate-700">Ubah PIN</Text>
           <TextInput
             value={newPin}
